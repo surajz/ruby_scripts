@@ -1,0 +1,297 @@
+package com.test.aix.temp.run
+
+import akka.actor.ActorSystem
+import akka.stream.ActorMaterializer
+import com.typesafe.sslconfig.ssl.{SSLConfigSettings, SSLLooseConfig}
+import play.api.libs.ws._
+import play.api.libs.ws.ahc._
+
+import scala.concurrent.Await
+
+import scala.concurrent.Future
+
+
+class WsCall(val restEndpoint: String ) {
+
+  implicit val system = ActorSystem()
+  implicit val materializer = ActorMaterializer()
+
+
+
+  // ignore the SSL for now, since don't have the keys
+      val config = AhcWSClientConfig().copy(
+      wsClientConfig = WSClientConfig().copy(
+        ssl = SSLConfigSettings()
+          .withLoose(
+            SSLLooseConfig()
+              .withAcceptAnyCertificate(true)
+          )
+      )
+    )
+
+
+  val wsClient = StandaloneAhcWSClient(config)
+
+  def getResponse(jsonBody: String): (Int, String) = {
+
+    import scala.concurrent.ExecutionContext.Implicits._
+
+    val resp: Future[(Int, String)] = call(jsonBody)
+     // .andThen { case _ => wsClient.close() }
+     // .andThen { case _ => system.terminate() }
+
+    import scala.concurrent.duration._
+    Await.result(resp, 10 seconds)
+
+  }
+
+  def close(): Unit = {
+    wsClient.close()
+    system.terminate()
+  }
+
+
+
+
+  private def call( jsonstr: String): Future[(Int, String)] = {
+
+    import scala.concurrent.ExecutionContext.Implicits._
+
+    wsClient.url(restEndpoint).
+      addHttpHeaders("Content-Type" -> "application/json").
+      post(jsonstr).
+      map { response =>
+        val statusText: String = response.statusText
+        println(s"Got a response $statusText, body ${response.body}")
+
+        (response.status, response.body)
+      }
+  }
+
+}
+
+object Utils {
+
+  @annotation.tailrec
+  final def retry[T] (n:Int)(fn: => T): T = {
+    util.Try { fn } match {
+      case util.Success(x)=>x
+      case _ if n>1 => retry(n-1)(fn)
+      case util.Failure(e) => throw e
+    }
+  }
+}
+
+
+---
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.dbs.aix</groupId>
+		<artifactId>extractor</artifactId>
+		<version>1.0-SNAPSHOT</version>
+	</parent>
+
+	<artifactId>testtools</artifactId>
+	<name>test tools</name>
+	<url>http://maven.apache.org</url>
+
+
+	<properties>
+		<java.version>1.8</java.version>
+		<maven.compiler.source>1.8</maven.compiler.source>
+		<maven.compiler.target>1.8</maven.compiler.target>
+		<scala.binary.version>2.11</scala.binary.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<junit.version>4.12</junit.version>
+		<spark.version>2.1.0</spark.version>
+		<scala.tools.version>2.11</scala.tools.version>
+		<scala.version>2.11.0</scala.version>
+		<scala.compat.version>2.11</scala.compat.version>
+	</properties>
+
+	<dependencies>
+
+		<dependency>
+			<groupId>org.apache.spark</groupId>
+			<artifactId>spark-sql_${scala.tools.version}</artifactId>
+			<version>${spark.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>1.7.25</version>
+		</dependency>
+
+		<!-- <dependency> <groupId>net.sf.JRecord</groupId> <artifactId>JRecord</artifactId> 
+			<version>0.80.8</version> </dependency> -->
+		<!-- <dependency> <groupId>net.sf.JRecord</groupId> <artifactId>cb2xml</artifactId> 
+			<version>0.80.8</version> </dependency> -->
+		<dependency>
+			<groupId>org.codehaus.jackson</groupId>
+			<artifactId>jackson-mapper-asl</artifactId>
+			<version>1.5.0</version>
+		</dependency>
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<version>2.6</version>
+		</dependency>
+
+
+
+		<dependency>
+			<groupId>com.typesafe.akka</groupId>
+			<artifactId>akka-actor</artifactId>
+			<version>2.1.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.typesafe.akka</groupId>
+			<artifactId>akka-remote</artifactId>
+			<version>2.1.1</version>
+		</dependency>
+
+
+		<dependency>
+			<groupId>com.typesafe</groupId>
+			<artifactId>config</artifactId>
+			<version>1.2.1</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.json4s</groupId>
+			<artifactId>json4s-native_2.11</artifactId>
+			<version>3.5.3</version>
+		</dependency>
+
+		<!--<dependency>-->
+			<!--<groupId>com.typesafe.play</groupId>-->
+			<!--<artifactId>play-ws_2.11</artifactId>-->
+			<!--<version>2.6.11</version>-->
+		<!--</dependency>-->
+
+		<!--<dependency>-->
+			<!--<groupId>com.typesafe.play</groupId>-->
+			<!--<artifactId>play-ahc-ws-standalone_2.11</artifactId>-->
+			<!--<version>1.1.3</version>-->
+		<!--</dependency>-->
+		<!-- https://mvnrepository.com/artifact/com.typesafe.play/play-ws -->
+
+
+
+		<dependency>
+			<groupId>com.typesafe.play</groupId>
+			<artifactId>play-ahc-ws-standalone_2.11</artifactId>
+			<version>1.0.7</version>
+		</dependency>
+		<dependency>
+			<groupId>com.typesafe.play</groupId>
+			<artifactId>play-ws-standalone-json_2.11</artifactId>
+			<version>1.0.7</version>
+		</dependency>
+		<dependency>
+			<groupId>com.typesafe</groupId>
+			<artifactId>config</artifactId>
+			<version>1.3.0</version>
+		</dependency>
+
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>4.12</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>3.16</version>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<sourceDirectory>src/main/scala</sourceDirectory>
+		<testSourceDirectory>src/test/scala</testSourceDirectory>
+
+		<plugins>
+			<!-- <plugin>
+                <groupId>org.scalatest</groupId>
+                <artifactId>scalatest-maven-plugin</artifactId>
+            </plugin> -->
+
+			<plugin>
+				<groupId>com.google.code.sbt-compiler-maven-plugin</groupId>
+				<artifactId>sbt-compiler-maven-plugin</artifactId>
+				<version>${sbt-compiler.plugin.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>compile</goal>
+							<goal>testCompile</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<plugin>
+				<groupId>org.scoverage</groupId>
+				<artifactId>scoverage-maven-plugin</artifactId>
+				<version>${scoverage.plugin.version}</version>
+				<configuration>
+					<aggregate>true</aggregate> <!-- for aggregated report -->
+					<highlighting>false</highlighting>
+				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>net.alchim31.maven</groupId>
+				<artifactId>scala-maven-plugin</artifactId>
+			</plugin>
+
+		</plugins>
+	</build>
+
+	<profiles>
+		<profile>
+			<id>createUberJar</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-shade-plugin</artifactId>
+						<executions>
+							<execution>
+								<phase>package</phase>
+								<goals>
+									<goal>shade</goal>
+								</goals>
+							</execution>
+						</executions>
+						<configuration>
+							<filters>
+								<filter>
+									<artifact>**</artifact>
+									<includes>
+										<include>**</include>
+									</includes>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RSA</exclude>
+									</excludes>
+								</filter>
+							</filters>
+							<finalName>${artifactId}-${version}</finalName>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
+</project>
+
